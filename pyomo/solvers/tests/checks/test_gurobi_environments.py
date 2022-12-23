@@ -8,6 +8,7 @@ cloud, WLS tokens)
 import gc
 from contextlib import contextmanager
 
+import pytest
 import gurobipy as gp
 
 import pyomo.common.errors as pyo_errors
@@ -15,21 +16,45 @@ import pyomo.environ as pyo
 from pyomo.solvers.plugins.solvers.gurobi_direct import GurobiDirect
 
 
+def cleanup():
+    GurobiDirect._verified_license = None
+    GurobiDirect._import_messages = ""
+    GurobiDirect._name = None
+    GurobiDirect._version = 0
+    GurobiDirect._version_major = 0
+    gc.collect()
+    gp.disposeDefaultEnv()
+
+
+def using_singleuse_license():
+    cleanup()
+    try:
+        with gp.Env():
+            try:
+                with gp.Env():
+                    # License allows multiple uses
+                    return False
+            except gp.GurobiError:
+                return True
+    except gp.GurobiError:
+        # No license available
+        return False
+
+
 @contextmanager
 def pyomo_global_cleanup():
     """Forcefully clean up pyomo's global state after exiting this context."""
+    cleanup()
     try:
         yield
     finally:
-        GurobiDirect._verified_license = None
-        GurobiDirect._import_messages = ""
-        GurobiDirect._name = None
-        GurobiDirect._version = 0
-        GurobiDirect._version_major = 0
-        gc.collect()
-        gp.disposeDefaultEnv()
+        cleanup()
 
 
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_persisted_license_failure():
     """If the GurobiDirect.available() check fails to create a model, it stores
     the error message in global state and always returns it in future. For single
@@ -59,6 +84,10 @@ def test_persisted_license_failure():
         opt.solve(model)
 
 
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_set_environment_options():
     """
     Cannot set environment-only options since pyomo only deals with Models.
@@ -84,6 +113,10 @@ def test_set_environment_options():
         opt.solve(model)
 
 
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_environment_context():
     """
     The context management feature of pyomo should be used to correctly
@@ -102,6 +135,10 @@ def test_environment_context():
             pass
 
 
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_default_environment_disposal():
     """
     This fails because there is no public API for cleaning up the model and it
@@ -118,6 +155,11 @@ def test_default_environment_disposal():
             pass
 
 
+@pytest.mark.xfail
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_explicit_env():
     """
     IMO this would be nice to do, as it means we can give the user complete control
@@ -137,6 +179,10 @@ def test_explicit_env():
                 opt.solve(model)
 
 
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_multiple_solvers():
     """This currently passes but would fail if each of opt1 and opt2 created their
     own environments by default (and they were used without context managers).
@@ -153,6 +199,10 @@ def test_multiple_solvers():
         opt2.solve(model2)
 
 
+@pytest.mark.solver("gurobi")
+@pytest.mark.skipif(
+    not using_singleuse_license(), reason="test needs a single use license"
+)
 def test_multiple_models_leaky():
     """Kind of a silly test, but this is just to point out that GurobiDirect
     creates a new _solver_model with each solve() call, and doesn't dispose

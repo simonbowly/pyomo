@@ -118,6 +118,9 @@ class GurobiDirect(DirectSolver):
         # version of gurobi is supported (and stored as a class attribute)
         del self._version
 
+        self.env = None
+        self._solver_model = None
+
     def available(self, exception_flag=True):
         if not gurobipy_available:
             if exception_flag:
@@ -132,13 +135,13 @@ class GurobiDirect(DirectSolver):
                     # verify that we can get a Gurobi license
                     # Gurobipy writes out license file information when creating
                     # the environment
-                    m = gurobipy.Model()
-                    m.dispose()
+                    self.initenv()
                     GurobiDirect._verified_license = True
                 except Exception as e:
+                    logging.exception(e)
                     GurobiDirect._import_messages += \
                         "\nCould not create Model - gurobi message=%s\n" % (e,)
-                    GurobiDirect._verified_license = False
+                    GurobiDirect._verified_license = None  # always try again
             if OUT.getvalue():
                 GurobiDirect._import_messages += "\n" + OUT.getvalue()
         if exception_flag and not self._verified_license:
@@ -275,6 +278,22 @@ class GurobiDirect(DirectSolver):
 
         self._needs_updated = True
 
+    def initenv(self):
+        if self.env is None:
+            assert self._solver_model is None
+            self.env = gurobipy.Env()
+
+    def closeenv(self):
+        if self.env is not None:
+            if self._solver_model is not None:
+                self._solver_model.close()
+                self._solver_model = None
+            self.env.close()
+            self.env = None
+
+    def __exit__(self, t, v, traceback):
+        self.closeenv()
+
     def _set_instance(self, model, kwds={}):
         self._range_constraints = set()
         DirectOrPersistentSolver._set_instance(self, model, kwds)
@@ -283,10 +302,13 @@ class GurobiDirect(DirectSolver):
         self._pyomo_var_to_solver_var_map = ComponentMap()
         self._solver_var_to_pyomo_var_map = ComponentMap()
         try:
+            self.initenv()
+            if self._solver_model is not None:
+                self._solver_model.close()
             if model.name is not None:
-                self._solver_model = gurobipy.Model(model.name)
+                self._solver_model = gurobipy.Model(model.name, env=self.env)
             else:
-                self._solver_model = gurobipy.Model()
+                self._solver_model = gurobipy.Model(env=self.env)
         except Exception:
             e = sys.exc_info()[1]
             msg = ("Unable to create Gurobi model. "

@@ -138,7 +138,6 @@ class GurobiDirect(DirectSolver):
                     self.initenv()
                     GurobiDirect._verified_license = True
                 except Exception as e:
-                    logging.exception(e)
                     GurobiDirect._import_messages += \
                         "\nCould not create Model - gurobi message=%s\n" % (e,)
                     GurobiDirect._verified_license = None  # always try again
@@ -147,23 +146,11 @@ class GurobiDirect(DirectSolver):
         if exception_flag and not self._verified_license:
             logger.warning(GurobiDirect._import_messages)
             raise ApplicationError(
-                "Could not create a gurobipy Model for %s solver plugin"
-                % (type(self),))
+                "Could not create a gurobipy Model for %s solver plugin - msg=%s"
+                % (type(self), GurobiDirect._import_messages))
         return self._verified_license
 
-    def _apply_solver(self):
-        StaleFlagManager.mark_all_as_stale()
-
-        if self._tee:
-            self._solver_model.setParam('OutputFlag', 1)
-        else:
-            self._solver_model.setParam('OutputFlag', 0)
-
-        if self._keepfiles:
-            # Only save log file when the user wants to keep it.
-            self._solver_model.setParam('LogFile', self._log_file)
-            print("Solver log file: "+self._log_file)
-
+    def _set_options(self, obj):
         # Options accepted by gurobi (case insensitive):
         # ['Cutoff', 'IterationLimit', 'NodeLimit', 'SolutionLimit', 'TimeLimit',
         #  'FeasibilityTol', 'IntFeasTol', 'MarkowitzTol', 'MIPGap', 'MIPGapAbs',
@@ -184,7 +171,7 @@ class GurobiDirect(DirectSolver):
             # them to a numeric value in the event that
             # setting the parameter fails.
             try:
-                self._solver_model.setParam(key, option)
+                obj.setParam(key, option)
             except TypeError:
                 # we place the exception handling for
                 # checking the cast of option to a float in
@@ -195,7 +182,24 @@ class GurobiDirect(DirectSolver):
                 # trace
                 if not _is_numeric(option):
                     raise
-                self._solver_model.setParam(key, float(option))
+                obj.setParam(key, float(option))
+
+    def _apply_solver(self):
+        StaleFlagManager.mark_all_as_stale()
+
+        if self._tee:
+            self._solver_model.setParam('OutputFlag', 1)
+        else:
+            self._solver_model.setParam('OutputFlag', 0)
+
+        if self._keepfiles:
+            # Only save log file when the user wants to keep it.
+            self._solver_model.setParam('LogFile', self._log_file)
+            print("Solver log file: "+self._log_file)
+
+        # No need, already done in env creation. Unless the user changed
+        # some parameters between solving models...?
+        # self._set_options(self._solver_model)
 
         if self._version_major >= 5:
             for suffix in self._suffixes:
@@ -281,7 +285,13 @@ class GurobiDirect(DirectSolver):
     def initenv(self):
         if self.env is None:
             assert self._solver_model is None
-            self.env = gurobipy.Env()
+            self.env = gurobipy.Env(empty=True)
+            self._set_options(self.env)
+            try:
+                self.env.start()
+            except gurobipy.GurobiError:
+                self.env = None
+                raise
 
     def closeenv(self):
         if self.env is not None:
@@ -309,7 +319,7 @@ class GurobiDirect(DirectSolver):
                 self._solver_model = gurobipy.Model(model.name, env=self.env)
             else:
                 self._solver_model = gurobipy.Model(env=self.env)
-        except Exception:
+        except Exception as e:
             e = sys.exc_info()[1]
             msg = ("Unable to create Gurobi model. "
                    "Have you installed the Python "

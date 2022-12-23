@@ -107,10 +107,13 @@ def test_set_environment_options():
     """
     with pyomo_global_cleanup():
         model = pyo.ConcreteModel()
-        opt = pyo.SolverFactory("gurobi_direct", options={"MemLimit": 5000})
-        # Need to pick some options out as environment parameters, or somehow
-        # allow the user to specify them differently?
-        opt.solve(model)
+        opt = pyo.SolverFactory(
+            "gurobi_direct", options={"ComputeServer": "/url/to/server"}
+        )
+        # Check that the error comes from an attempted connection, not from setting
+        # the parameter after the environment is started.
+        with pytest.raises(pyo_errors.ApplicationError, match="Could not resolve host"):
+            opt.solve(model)
 
 
 @pytest.mark.solver("gurobi")
@@ -179,6 +182,7 @@ def test_explicit_env():
                 opt.solve(model)
 
 
+@pytest.mark.xfail
 @pytest.mark.solver("gurobi")
 @pytest.mark.skipif(
     not using_singleuse_license(), reason="test needs a single use license"

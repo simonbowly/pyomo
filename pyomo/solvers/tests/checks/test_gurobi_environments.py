@@ -163,30 +163,6 @@ def test_default_environment_disposal():
 @pytest.mark.skipif(
     not using_singleuse_license(), reason="test needs a single use license"
 )
-def test_explicit_env():
-    """
-    IMO this would be nice to do, as it means we can give the user complete control
-    over environment creation using gurobipy. This is necessary for tricks
-    like retrying to get a token license.
-
-    An alternative might be to pass SolverFactory a factory function that
-    creates the environment, and then GurobiDirect disposes it at the end of
-    the context.
-    """
-    with pyomo_global_cleanup():
-        with gp.Env() as env:
-            # Fails because this env is not used, pyomo tries to start the default
-            # env alongside it.
-            with pyo.SolverFactory("gurobi_direct", env=env) as opt:
-                model = pyo.ConcreteModel()
-                opt.solve(model)
-
-
-@pytest.mark.xfail
-@pytest.mark.solver("gurobi")
-@pytest.mark.skipif(
-    not using_singleuse_license(), reason="test needs a single use license"
-)
 def test_multiple_solvers():
     """This currently passes but would fail if each of opt1 and opt2 created their
     own environments by default (and they were used without context managers).

@@ -184,28 +184,22 @@ def test_multiple_solvers():
     not using_singleuse_license(), reason="test needs a single use license"
 )
 def test_multiple_models_leaky():
-    """Kind of a silly test, but this is just to point out that GurobiDirect
-    creates a new _solver_model with each solve() call, and doesn't dispose
-    the old one. If the scope accidentally leaks then a license or remote
-    environment can remain in use."""
+    """ Make sure all models are closed by the GurobiDirect instance. """
 
     with pyomo_global_cleanup():
 
-        opt = pyo.SolverFactory("gurobi_direct")
+        with pyo.SolverFactory("gurobi_direct") as opt:
 
-        model1 = pyo.ConcreteModel()
-        opt.solve(model1)
+            model1 = pyo.ConcreteModel()
+            opt.solve(model1)
 
-        tmp = opt._solver_model
+            # Leak a model reference, then create a new model.
+            # Pyomo should close the old model since it is no longed needed.
+            tmp = opt._solver_model
 
-        model2 = pyo.ConcreteModel()
-        opt.solve(model2)
+            model2 = pyo.ConcreteModel()
+            opt.solve(model2)
 
-        opt._solver_model.dispose()
-        del opt
-        gp.disposeDefaultEnv()
-
-        # Still holding a leaked model reference in tmp, so the environment
-        # is not properly freed.
+        # Context properly closed all models and environments
         with gp.Env():
             pass

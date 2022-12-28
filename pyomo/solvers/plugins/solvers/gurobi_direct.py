@@ -293,7 +293,7 @@ class GurobiDirect(DirectSolver):
                 self.env = None
                 raise
 
-    def closeenv(self):
+    def close(self):
         if self.env is not None:
             if self._solver_model is not None:
                 self._solver_model.close()
@@ -302,7 +302,7 @@ class GurobiDirect(DirectSolver):
             self.env = None
 
     def __exit__(self, t, v, traceback):
-        self.closeenv()
+        self.close()
 
     def _set_instance(self, model, kwds={}):
         self._range_constraints = set()

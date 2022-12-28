@@ -1,8 +1,6 @@
 """
-These tests are intended to be run with a single use license.
-The failure types are equivalent for any resource contention in Gurobi
-environments (compute server sessions, token server licenses, instant
-cloud, WLS tokens)
+Tests for working with Gurobi environments. Some require a single-use license
+and are skipped if this isn't the case.
 """
 
 import gc
@@ -16,17 +14,8 @@ import pyomo.environ as pyo
 from pyomo.solvers.plugins.solvers.gurobi_direct import GurobiDirect
 
 
-def cleanup():
-    GurobiDirect._verified_license = None
-    GurobiDirect._import_messages = ""
-    GurobiDirect._name = None
-    GurobiDirect._version = 0
-    GurobiDirect._version_major = 0
-    gc.collect()
-    gp.disposeDefaultEnv()
-
-
 def using_singleuse_license():
+    # Return true if the current license is single-use
     cleanup()
     try:
         with gp.Env():
@@ -39,6 +28,16 @@ def using_singleuse_license():
     except gp.GurobiError:
         # No license available
         return False
+
+
+def cleanup():
+    GurobiDirect._verified_license = None
+    GurobiDirect._import_messages = ""
+    GurobiDirect._name = None
+    GurobiDirect._version = 0
+    GurobiDirect._version_major = 0
+    gc.collect()
+    gp.disposeDefaultEnv()
 
 
 @contextmanager
@@ -56,60 +55,35 @@ def pyomo_global_cleanup():
     not using_singleuse_license(), reason="test needs a single use license"
 )
 def test_persisted_license_failure():
-    """If the GurobiDirect.available() check fails to create a model, it stores
-    the error message in global state and always returns it in future. For single
-    use or token licenses, any failure renders the application unusable.
-
-    Ideally, available() should just check if gurobipy is importable, it
-    shouldn't try to start an environment.
-
-    Fails with:
-
-        pyomo.common.errors.ApplicationError: Could not create a gurobipy Model
-        for <class 'pyomo.solvers.plugins.solvers.gurobi_direct.GurobiDirect'>
-        solver plugin
-
-    """
+    """ Solver should allow retries to start the environment, instead of
+    persisting the same failure. """
     with pyomo_global_cleanup():
+
         model = pyo.ConcreteModel()
         with gp.Env():
             opt = pyo.SolverFactory("gurobi_direct")
             try:
+                # Expected to fail: there is another environment open so the
+                # solver env cannot be started.
                 opt.solve(model)
+                assert False  # Something wrong with the test if we got here
             except pyo_errors.ApplicationError:
-                # Expected failure for a single use license. There is another
-                # environment open so the default env cannot be started.
                 pass
-        # This not raise an error, since the other environment has been freed.
+        # Should not raise an error, since the other environment has been freed.
         opt.solve(model)
 
 
 @pytest.mark.solver("gurobi")
-@pytest.mark.skipif(
-    not using_singleuse_license(), reason="test needs a single use license"
-)
 def test_set_environment_options():
-    """
-    Cannot set environment-only options since pyomo only deals with Models.
-
-    Fails with:
-
-        gurobipy.GurobiError: Unable to modify parameter MemLimit after
-        environment started
-
-    Options:
-    1. Identify the environment parameters and apply them separately?
-    2. Nested options in the dictionary?
-    3. Separate argument env_options to SolverFactory?
-
-    Does this need to be compatible with the command line way of calling pyomo?
-
-    """
+    """ Solver options should handle parameters which must be set before the
+    environment is started (i.e. connection params, memory limits). """
     with pyomo_global_cleanup():
+
         model = pyo.ConcreteModel()
         opt = pyo.SolverFactory(
             "gurobi_direct", options={"ComputeServer": "/url/to/server"}
         )
+
         # Check that the error comes from an attempted connection, not from setting
         # the parameter after the environment is started.
         with pytest.raises(pyo_errors.ApplicationError, match="Could not resolve host"):
@@ -120,20 +94,15 @@ def test_set_environment_options():
 @pytest.mark.skipif(
     not using_singleuse_license(), reason="test needs a single use license"
 )
-def test_environment_context():
-    """
-    The context management feature of pyomo should be used to correctly
-    dispose of environments.
-    """
+def test_context():
+    """ Context management should close the gurobi environment. """
     with pyomo_global_cleanup():
+
         with pyo.SolverFactory("gurobi_direct") as opt:
             model = pyo.ConcreteModel()
             opt.solve(model)
-        # Ideally the environment and all models would be freed at this point.
-        # It could be made implicit, in the sense that if you use the context
-        # manager form, environment creation is triggerred by __enter__ and
-        # disposed in __exit__, but if you don't use the class as a context manager
-        # then the default env is used?
+
+        # Environment closed, so another can be created
         with gp.Env():
             pass
 
@@ -142,18 +111,16 @@ def test_environment_context():
 @pytest.mark.skipif(
     not using_singleuse_license(), reason="test needs a single use license"
 )
-def test_default_environment_disposal():
-    """
-    This fails because there is no public API for cleaning up the model and it
-    doesn't fall out of scope.
-    """
+def test_close():
+    """ Manual close() method  should close the gurobi environment. """
     with pyomo_global_cleanup():
-        with pyo.SolverFactory("gurobi_direct") as opt:
-            model = pyo.ConcreteModel()
-            opt.solve(model)
-        gp.disposeDefaultEnv()
-        # opt is still in scope, as is it's _solver_model. This also needs to be
-        # disposed of or the default env is not really freed.
+
+        opt = pyo.SolverFactory("gurobi_direct")
+        model = pyo.ConcreteModel()
+        opt.solve(model)
+        opt.close()
+
+        # Environment closed, so another can be created
         with gp.Env():
             pass
 
@@ -164,9 +131,9 @@ def test_default_environment_disposal():
     not using_singleuse_license(), reason="test needs a single use license"
 )
 def test_multiple_solvers():
-    """This currently passes but would fail if each of opt1 and opt2 created their
-    own environments by default (and they were used without context managers).
-    Something to be careful of."""
+    """ Breaking change: this would previously have worked since multiple
+    solvers share the default environment. The workaround is easy (re-use
+    the solver) but some users may have written their code this way. """
 
     with pyomo_global_cleanup():
 

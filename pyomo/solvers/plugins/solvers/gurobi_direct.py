@@ -73,8 +73,6 @@ gurobipy, gurobipy_available = attempt_import(
 @SolverFactory.register('gurobi_direct', doc='Direct python interface to Gurobi')
 class GurobiDirect(DirectSolver):
 
-    _verified_license = None
-    _import_messages = ''
     _name = None
     _version = 0
     _version_major = 0
@@ -122,6 +120,7 @@ class GurobiDirect(DirectSolver):
         self._solver_model = None
 
     def available(self, exception_flag=True):
+        # First check gurobipy is imported
         if not gurobipy_available:
             if exception_flag:
                 gurobipy.log_import_warning(logger=__name__)
@@ -129,26 +128,26 @@ class GurobiDirect(DirectSolver):
                     "No Python bindings available for %s solver plugin"
                     % (type(self),))
             return False
-        if self._verified_license is None:
-            with capture_output(capture_fd=True) as OUT:
-                try:
-                    # verify that we can get a Gurobi license
-                    # Gurobipy writes out license file information when creating
-                    # the environment
-                    self.initenv()
-                    GurobiDirect._verified_license = True
-                except Exception as e:
-                    GurobiDirect._import_messages += \
-                        "\nCould not create Model - gurobi message=%s\n" % (e,)
-                    GurobiDirect._verified_license = None  # always try again
-            if OUT.getvalue():
-                GurobiDirect._import_messages += "\n" + OUT.getvalue()
-        if exception_flag and not self._verified_license:
-            logger.warning(GurobiDirect._import_messages)
+        # Check if this solver already has a license
+        if self.env is not None:
+            return True
+        # Start environment to check for a valid license
+        with capture_output(capture_fd=True) as OUT:
+            try:
+                self.initenv()
+                return True
+            except gurobipy.GurobiError as e:
+                msg = "Could not create Model - gurobi message=%s\n" % (e,)
+        if OUT.getvalue():
+            msg += "\n" + OUT.getvalue()
+        # Didn't return, so environment start failed
+        if exception_flag:
+            logger.warning(msg)
             raise ApplicationError(
                 "Could not create a gurobipy Model for %s solver plugin - msg=%s"
-                % (type(self), GurobiDirect._import_messages))
-        return self._verified_license
+                % (type(self), msg))
+        else:
+            return False
 
     def _set_options(self, obj):
         # Options accepted by gurobi (case insensitive):
@@ -197,9 +196,10 @@ class GurobiDirect(DirectSolver):
             self._solver_model.setParam('LogFile', self._log_file)
             print("Solver log file: "+self._log_file)
 
-        # No need, already done in env creation. Unless the user changed
-        # some parameters between solving models...?
-        # self._set_options(self._solver_model)
+        # FIXME the user might pass other parameters to opt.solve(), which
+        # need to be set only on the model. One way to handle this is to compare
+        # the environment parameters to the options dict, and apply any changes
+        # needed to the model?
 
         if self._version_major >= 5:
             for suffix in self._suffixes:
@@ -285,13 +285,11 @@ class GurobiDirect(DirectSolver):
     def initenv(self):
         if self.env is None:
             assert self._solver_model is None
-            self.env = gurobipy.Env(empty=True)
-            self._set_options(self.env)
-            try:
-                self.env.start()
-            except gurobipy.GurobiError:
-                self.env = None
-                raise
+            env = gurobipy.Env(empty=True)
+            self._set_options(env)
+            env.start()
+            # Successful start: store it
+            self.env = env
 
     def close(self):
         if self.env is not None:

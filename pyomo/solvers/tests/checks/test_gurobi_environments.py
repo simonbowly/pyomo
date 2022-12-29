@@ -61,7 +61,7 @@ def test_persisted_license_failure():
 
         model = pyo.ConcreteModel()
         with gp.Env():
-            opt = pyo.SolverFactory("gurobi_direct")
+            opt = pyo.SolverFactory("gurobi_direct", manage_env=True)
             try:
                 # Expected to fail: there is another environment open so the
                 # solver env cannot be started.
@@ -82,7 +82,8 @@ def test_set_environment_options():
 
         model = pyo.ConcreteModel()
         opt = pyo.SolverFactory(
-            "gurobi_direct", options={"ComputeServer": "/url/to/server"}
+            "gurobi_direct", manage_env=True,
+            options={"ComputeServer": "/url/to/server"},
         )
 
         # Check that the error comes from an attempted connection, not from setting
@@ -99,7 +100,7 @@ def test_context():
     """ Context management should close the gurobi environment. """
     with pyomo_global_cleanup():
 
-        with pyo.SolverFactory("gurobi_direct") as opt:
+        with pyo.SolverFactory("gurobi_direct", manage_env=True) as opt:
             model = pyo.ConcreteModel()
             opt.solve(model)
 
@@ -116,7 +117,7 @@ def test_close():
     """ Manual close() method  should close the gurobi environment. """
     with pyomo_global_cleanup():
 
-        opt = pyo.SolverFactory("gurobi_direct")
+        opt = pyo.SolverFactory("gurobi_direct", manage_env=True)
         model = pyo.ConcreteModel()
         opt.solve(model)
         opt.close()
@@ -126,7 +127,6 @@ def test_close():
             pass
 
 
-@pytest.mark.xfail
 @pytest.mark.solver("gurobi")
 @pytest.mark.skipif(
     not using_singleuse_license(), reason="test needs a single use license"
@@ -163,7 +163,7 @@ def test_multiple_models_leaky():
 
     with pyomo_global_cleanup():
 
-        with pyo.SolverFactory("gurobi_direct") as opt:
+        with pyo.SolverFactory("gurobi_direct", manage_env=True) as opt:
 
             model1 = pyo.ConcreteModel()
             opt.solve(model1)

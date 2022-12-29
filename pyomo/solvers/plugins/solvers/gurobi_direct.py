@@ -77,7 +77,7 @@ class GurobiDirect(DirectSolver):
     _version = 0
     _version_major = 0
 
-    def __init__(self, **kwds):
+    def __init__(self, manage_env=False, **kwds):
         if 'type' not in kwds:
             kwds['type'] = 'gurobi_direct'
         super(GurobiDirect, self).__init__(**kwds)
@@ -116,7 +116,8 @@ class GurobiDirect(DirectSolver):
         # version of gurobi is supported (and stored as a class attribute)
         del self._version
 
-        self.env = None
+        self._manage_env = manage_env
+        self._env = None
         self._solver_model = None
 
     def available(self, exception_flag=True):
@@ -129,7 +130,7 @@ class GurobiDirect(DirectSolver):
                     % (type(self),))
             return False
         # Check if this solver already has a license
-        if self.env is not None:
+        if self._env is not None:
             return True
         # Start environment to check for a valid license
         with capture_output(capture_fd=True) as OUT:
@@ -283,21 +284,37 @@ class GurobiDirect(DirectSolver):
         self._needs_updated = True
 
     def initenv(self):
-        if self.env is None:
-            assert self._solver_model is None
-            env = gurobipy.Env(empty=True)
-            self._set_options(env)
-            env.start()
-            # Successful start: store it
-            self.env = env
+        if self._manage_env:
+            # Ensure an environment is active for this instance
+            if self._env is None:
+                assert self._solver_model is None
+                env = gurobipy.Env(empty=True)
+                self._set_options(env)
+                env.start()
+                # Successful start: store it
+                self._env = env
+        else:
+            # Ensure the default env is started
+            with gurobipy.Model():
+                pass
+
+    def _create_model(self, model):
+        self.initenv()
+        if self._solver_model is not None:
+            self._solver_model.close()
+        if model.name is not None:
+            self._solver_model = gurobipy.Model(model.name, env=self._env)
+        else:
+            self._solver_model = gurobipy.Model(env=self._env)
 
     def close(self):
-        if self.env is not None:
-            if self._solver_model is not None:
-                self._solver_model.close()
-                self._solver_model = None
-            self.env.close()
-            self.env = None
+        if self._solver_model is not None:
+            self._solver_model.close()
+            self._solver_model = None
+        if self._manage_env:
+            if self._env is not None:
+                self._env.close()
+                self._env = None
 
     def __enter__(self):
         super().__enter__()
@@ -316,13 +333,7 @@ class GurobiDirect(DirectSolver):
         self._pyomo_var_to_solver_var_map = ComponentMap()
         self._solver_var_to_pyomo_var_map = ComponentMap()
         try:
-            self.initenv()
-            if self._solver_model is not None:
-                self._solver_model.close()
-            if model.name is not None:
-                self._solver_model = gurobipy.Model(model.name, env=self.env)
-            else:
-                self._solver_model = gurobipy.Model(env=self.env)
+            self._create_model(model)
         except Exception as e:
             e = sys.exc_info()[1]
             msg = ("Unable to create Gurobi model. "

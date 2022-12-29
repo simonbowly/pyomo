@@ -103,7 +103,7 @@ def test_set_environment_options_notmanaged():
 
         # Check that the error comes from an attempted connection, not from setting
         # the parameter after the environment is started.
-        with pytest.raises(pyo_errors.ApplicationError, match="Could not resolve host"):
+        with pytest.raises(gp.GurobiError, match="Unable to modify"):
             opt.solve(model)
 
 

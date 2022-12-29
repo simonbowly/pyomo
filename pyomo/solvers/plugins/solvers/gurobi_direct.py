@@ -197,10 +197,8 @@ class GurobiDirect(DirectSolver):
             self._solver_model.setParam('LogFile', self._log_file)
             print("Solver log file: "+self._log_file)
 
-        # FIXME the user might pass other parameters to opt.solve(), which
-        # need to be set only on the model. One way to handle this is to compare
-        # the environment parameters to the options dict, and apply any changes
-        # needed to the model?
+        # FIXME this might set options which *must* be set on an environment.
+        self._set_options(self._solver_model)
 
         if self._version_major >= 5:
             for suffix in self._suffixes:

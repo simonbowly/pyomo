@@ -299,7 +299,13 @@ class GurobiDirect(DirectSolver):
             self.env.close()
             self.env = None
 
+    def __enter__(self):
+        super().__enter__()
+        self.initenv()
+        return self
+
     def __exit__(self, t, v, traceback):
+        super().__exit__(t, v, traceback)
         self.close()
 
     def _set_instance(self, model, kwds={}):

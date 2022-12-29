@@ -150,7 +150,7 @@ class GurobiDirect(DirectSolver):
         else:
             return False
 
-    def _set_options(self, obj):
+    def _set_options(self, obj, skip=None):
         # Options accepted by gurobi (case insensitive):
         # ['Cutoff', 'IterationLimit', 'NodeLimit', 'SolutionLimit', 'TimeLimit',
         #  'FeasibilityTol', 'IntFeasTol', 'MarkowitzTol', 'MIPGap', 'MIPGapAbs',
@@ -165,11 +165,15 @@ class GurobiDirect(DirectSolver):
         #  'Aggregate', 'AggFill', 'PreDual', 'DisplayInterval', 'IISMethod', 'InfUnbdInfo',
         #  'LogFile', 'PreCrush', 'PreDepRow', 'PreMIQPMethod', 'PrePasses', 'Presolve',
         #  'ResultFile', 'ImproveStartTime', 'ImproveStartGap', 'Threads', 'Dummy', 'OutputFlag']
+        if skip is None:
+            skip = dict()
         for key, option in self.options.items():
             # When options come from the pyomo command, all
             # values are string types, so we try to cast
             # them to a numeric value in the event that
             # setting the parameter fails.
+            if key in skip and skip[key] == option:
+                continue
             try:
                 obj.setParam(key, option)
             except TypeError:
@@ -198,7 +202,7 @@ class GurobiDirect(DirectSolver):
             print("Solver log file: "+self._log_file)
 
         # FIXME this might set options which *must* be set on an environment.
-        self._set_options(self._solver_model)
+        self._set_options(self._solver_model, skip=self._env_params)
 
         if self._version_major >= 5:
             for suffix in self._suffixes:
@@ -291,10 +295,12 @@ class GurobiDirect(DirectSolver):
                 env.start()
                 # Successful start: store it
                 self._env = env
+                self._env_params = dict(self.options)
         else:
             # Ensure the default env is started
             with gurobipy.Model():
                 pass
+            self._env_params = None
 
     def _create_model(self, model):
         self._init_env()

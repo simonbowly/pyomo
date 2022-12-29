@@ -31,11 +31,6 @@ def using_singleuse_license():
 
 
 def cleanup():
-    GurobiDirect._verified_license = None
-    GurobiDirect._import_messages = ""
-    GurobiDirect._name = None
-    GurobiDirect._version = 0
-    GurobiDirect._version_major = 0
     gc.collect()
     gp.disposeDefaultEnv()
 
@@ -152,6 +147,7 @@ def test_multiple_solvers():
 
             opt1.close()
             opt2.close()
+            gp.disposeDefaultEnv()
 
 
 @pytest.mark.solver("gurobi")

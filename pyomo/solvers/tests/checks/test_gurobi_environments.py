@@ -71,6 +71,7 @@ def test_persisted_license_failure():
                 pass
         # Should not raise an error, since the other environment has been freed.
         opt.solve(model)
+        opt.close()
 
 
 @pytest.mark.solver("gurobi")
@@ -137,13 +138,20 @@ def test_multiple_solvers():
 
     with pyomo_global_cleanup():
 
-        opt1 = pyo.SolverFactory("gurobi_direct")
-        model1 = pyo.ConcreteModel()
-        opt1.solve(model1)
+        try:
 
-        opt2 = pyo.SolverFactory("gurobi_direct")
-        model2 = pyo.ConcreteModel()
-        opt2.solve(model2)
+            opt1 = pyo.SolverFactory("gurobi_direct")
+            model1 = pyo.ConcreteModel()
+            opt1.solve(model1)
+
+            opt2 = pyo.SolverFactory("gurobi_direct")
+            model2 = pyo.ConcreteModel()
+            opt2.solve(model2)
+
+        finally:
+
+            opt1.close()
+            opt2.close()
 
 
 @pytest.mark.solver("gurobi")

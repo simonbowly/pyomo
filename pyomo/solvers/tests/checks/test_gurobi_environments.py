@@ -197,6 +197,38 @@ def test_multiple_models_leaky():
 
 
 @pytest.mark.solver("gurobi")
+def test_param_set():
+
+    # Make sure parameters aren't set twice. If they are set on
+    # the environment, they shouldn't be set on the model.
+
+    with pyomo_global_cleanup():
+
+        from unittest import mock
+
+        envparams = {}
+        modelparams = {}
+
+        class TempEnv(gp.Env):
+            def setParam(self, param, value):
+                envparams[param] = value
+
+        class TempModel(gp.Model):
+            def setParam(self, param, value):
+                modelparams[param] = value
+
+        with mock.patch("gurobipy.Env", new=TempEnv), mock.patch("gurobipy.Model", new=TempModel):
+
+            with pyo.SolverFactory("gurobi_direct", options={'Method': 2, 'MIPFocus': 1}, manage_env=True) as opt:
+                model = pyo.ConcreteModel()
+                opt.solve(model, options={'MIPFocus': 2})
+
+        # Method should not be set again, but MIPFocus was changed
+        assert envparams == {"Method": 2, "MIPFocus": 1}
+        assert modelparams == {"MIPFocus": 2, "OutputFlag": 0}
+
+
+@pytest.mark.solver("gurobi")
 def test_param_changes():
 
     # Try an erroneous parameter setting to ensure parameters go through

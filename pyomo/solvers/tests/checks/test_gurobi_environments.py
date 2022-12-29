@@ -88,6 +88,26 @@ def test_set_environment_options():
 
 
 @pytest.mark.solver("gurobi")
+def test_set_environment_options_notmanaged():
+    """ Solver options should handle parameters which must be set before the
+    environment is started (i.e. connection params, memory limits). If they
+    are set without manage_env, then pyomo will try to set them on the model,
+    which will fail."""
+    with pyomo_global_cleanup():
+
+        model = pyo.ConcreteModel()
+        opt = pyo.SolverFactory(
+            "gurobi_direct", manage_env=False,
+            options={"ComputeServer": "/url/to/server"},
+        )
+
+        # Check that the error comes from an attempted connection, not from setting
+        # the parameter after the environment is started.
+        with pytest.raises(pyo_errors.ApplicationError, match="Could not resolve host"):
+            opt.solve(model)
+
+
+@pytest.mark.solver("gurobi")
 @pytest.mark.skipif(
     not using_singleuse_license(), reason="test needs a single use license"
 )

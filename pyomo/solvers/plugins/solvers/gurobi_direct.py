@@ -135,7 +135,7 @@ class GurobiDirect(DirectSolver):
         # Start environment to check for a valid license
         with capture_output(capture_fd=True) as OUT:
             try:
-                self.initenv()
+                self._init_env()
                 return True
             except gurobipy.GurobiError as e:
                 msg = "Could not create Model - gurobi message=%s\n" % (e,)
@@ -281,7 +281,7 @@ class GurobiDirect(DirectSolver):
 
         self._needs_updated = True
 
-    def initenv(self):
+    def _init_env(self):
         if self._manage_env:
             # Ensure an environment is active for this instance
             if self._env is None:
@@ -297,7 +297,7 @@ class GurobiDirect(DirectSolver):
                 pass
 
     def _create_model(self, model):
-        self.initenv()
+        self._init_env()
         if self._solver_model is not None:
             self._solver_model.close()
         if model.name is not None:
@@ -316,7 +316,7 @@ class GurobiDirect(DirectSolver):
 
     def __enter__(self):
         super().__enter__()
-        self.initenv()
+        self._init_env()
         return self
 
     def __exit__(self, t, v, traceback):

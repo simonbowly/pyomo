@@ -245,15 +245,16 @@ def test_param_changes():
 
     with pyomo_global_cleanup():
 
-        # Managed env: parameters set on environment on __enter__
+        # Managed env: parameters set on env at solve time
 
-        with pytest.raises(gp.GurobiError, match='Unable to set'):
-            with pyo.SolverFactory("gurobi_direct", options={'Method': 20}, manage_env=True) as opt:
-                pass
+        with pyo.SolverFactory("gurobi_direct", options={'Method': 20}, manage_env=True) as opt:
+            model = pyo.ConcreteModel()
+            with pytest.raises(pyo_errors.ApplicationError, match='Unable to set'):
+                opt.solve(model)
 
     with pyomo_global_cleanup():
 
-        # Managed env, no context, so parameter settings are delayed
+        # Managed env: parameters set on env at solve time
 
         opt = pyo.SolverFactory("gurobi_direct", options={'Method': 20}, manage_env=True)
         try:

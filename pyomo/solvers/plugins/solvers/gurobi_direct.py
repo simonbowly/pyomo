@@ -320,11 +320,6 @@ class GurobiDirect(DirectSolver):
                 self._env.close()
                 self._env = None
 
-    def __enter__(self):
-        super().__enter__()
-        self._init_env()
-        return self
-
     def __exit__(self, t, v, traceback):
         super().__exit__(t, v, traceback)
         self.close()

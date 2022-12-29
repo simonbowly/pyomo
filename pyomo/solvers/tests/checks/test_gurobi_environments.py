@@ -194,3 +194,57 @@ def test_multiple_models_leaky():
         # Context properly closed all models and environments
         with gp.Env():
             pass
+
+
+@pytest.mark.solver("gurobi")
+def test_param_changes():
+
+    # Try an erroneous parameter setting to ensure parameters go through
+    # FIXME: different exception classes depending on the method used
+
+    with pyomo_global_cleanup():
+
+        # Default env: parameters set on model at solve time
+
+        with pyo.SolverFactory("gurobi_direct", options={'Method': 20}) as opt:
+            model = pyo.ConcreteModel()
+            with pytest.raises(gp.GurobiError, match='Unable to set'):
+                opt.solve(model)
+
+    with pyomo_global_cleanup():
+
+        # Managed env: parameters set on environment on __enter__
+
+        with pytest.raises(gp.GurobiError, match='Unable to set'):
+            with pyo.SolverFactory("gurobi_direct", options={'Method': 20}, manage_env=True) as opt:
+                pass
+
+    with pyomo_global_cleanup():
+
+        # Managed env, no context, so parameter settings are delayed
+
+        opt = pyo.SolverFactory("gurobi_direct", options={'Method': 20}, manage_env=True)
+        try:
+            model = pyo.ConcreteModel()
+            with pytest.raises(pyo_errors.ApplicationError, match='Unable to set'):
+                opt.solve(model)
+        finally:
+            opt.close()
+
+    with pyomo_global_cleanup():
+
+        # Default env: parameters passed to solve()
+
+        with pyo.SolverFactory("gurobi_direct") as opt:
+            model = pyo.ConcreteModel()
+            with pytest.raises(gp.GurobiError, match='Unable to set'):
+                opt.solve(model, options={'Method': 20})
+
+    with pyomo_global_cleanup():
+
+        # Managed env: parameters passed to solve()
+
+        with pyo.SolverFactory("gurobi_direct", manage_env=True) as opt:
+            model = pyo.ConcreteModel()
+            with pytest.raises(gp.GurobiError, match='Unable to set'):
+                opt.solve(model, options={'Method': 20})

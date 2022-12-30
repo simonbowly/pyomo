@@ -333,7 +333,7 @@ class GurobiDirect(DirectSolver):
         self._solver_var_to_pyomo_var_map = ComponentMap()
         try:
             self._create_model(model)
-        except Exception as e:
+        except Exception:
             e = sys.exc_info()[1]
             msg = ("Unable to create Gurobi model. "
                    "Have you installed the Python "
